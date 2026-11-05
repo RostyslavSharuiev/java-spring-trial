@@ -1,33 +1,35 @@
 package rostyslav.sharuiev.reservationsystem;
 
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class ReservationService {
-    private final Map<Long, Reservation> reservationMap;
-    private final AtomicLong idCounter;
+    private final ReservationRepository repository;
 
-    public ReservationService() {
-        reservationMap = new HashMap<>();
-        idCounter = new AtomicLong();
+    public ReservationService(ReservationRepository repository) {
+        this.repository = repository;
     }
 
     public List<Reservation> findAllReservations() {
-        return reservationMap.values().stream().toList();
+        List<ReservationEntity> allEntities = repository.findAll();
+
+        return allEntities
+                .stream()
+                .map(this::toDomainReservation)
+                .toList();
     }
 
     public Reservation getReservationById(Long id) {
-        if (!reservationMap.containsKey(id)) {
-            throw new NoSuchElementException("Not found reservation with id: " + id);
-        }
+        ReservationEntity reservationEntity = repository
+                .findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Not found reservation with id: " + id
+                ));
 
-        return reservationMap.get(id);
+        return toDomainReservation(reservationEntity);
     }
 
     public Reservation createReservation(Reservation reservation) {
@@ -39,8 +41,8 @@ public class ReservationService {
             throw new IllegalArgumentException("Status should be empty");
         }
 
-        var newReservation = new Reservation(
-                idCounter.incrementAndGet(),
+        var entityToSave = new ReservationEntity(
+               null,
                 reservation.userId(),
                 reservation.roomId(),
                 reservation.startDate(),
@@ -48,95 +50,105 @@ public class ReservationService {
                 ReservationStatus.PENDING
         );
 
-        reservationMap.put(newReservation.id(), newReservation);
+        var savedEntity = repository.save(entityToSave);
 
-        return newReservation;
+        return toDomainReservation(savedEntity);
     }
 
-    public Reservation updateReservation(Long id, Reservation reservation) {
-        if (!reservationMap.containsKey(id)) {
-            throw new NoSuchElementException("Not found reservation with id: " + id);
+    public Reservation updateReservation(Long id, Reservation reservationToUpdate) {
+        var reservationEntity = repository
+                .findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Not found reservation with id: " + id
+                ));
+
+        if (reservationEntity.getStatus() != ReservationStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot modify reservation with status " + reservationEntity.getStatus()
+            );
         }
 
-        var olrReservation = reservationMap.get(id);
-
-        if (olrReservation.status() != ReservationStatus.PENDING) {
-            throw new IllegalStateException("Cannot modify reservation with status " + olrReservation.status());
-        }
-
-        var updatedReservation = new Reservation(
-                olrReservation.id(),
-                reservation.userId(),
-                reservation.roomId(),
-                reservation.startDate(),
-                reservation.endDate(),
+        var reservationToSave = new ReservationEntity(
+                reservationEntity.getId(),
+                reservationToUpdate.userId(),
+                reservationToUpdate.roomId(),
+                reservationToUpdate.startDate(),
+                reservationToUpdate.endDate(),
                 ReservationStatus.PENDING
         );
 
-        reservationMap.put(olrReservation.id(), updatedReservation);
+        var updatedReservation = repository.save(reservationToSave);
 
-        return updatedReservation;
+        return toDomainReservation(updatedReservation);
     }
 
     public void deleteReservation(Long id) {
-        if (!reservationMap.containsKey(id)) {
-            throw new NoSuchElementException("Not found reservation with id: " + id);
+        if (!repository.existsById(id)) {
+            throw new EntityNotFoundException("Not found reservation with id: " + id);
         }
 
-        reservationMap.remove(id);
+        repository.deleteById(id);
     }
 
     public Reservation approveReservation(Long id) {
-        if (!reservationMap.containsKey(id)) {
-            throw new NoSuchElementException("Not found reservation with id: " + id);
+        var reservationEntity = repository
+                .findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Not found reservation with id: " + id
+                ));
+
+        if (reservationEntity.getStatus() != ReservationStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot approve reservation with status " + reservationEntity.getStatus()
+            );
         }
 
-        var reservation = reservationMap.get(id);
-
-        if (reservation.status() != ReservationStatus.PENDING) {
-            throw new IllegalStateException("Cannot approve reservation with status " + reservation.status());
-        }
-
-        var isConflict = isReservationConflict(reservation);
+        var isConflict = isReservationConflict(reservationEntity);
 
         if (isConflict) {
             throw new IllegalStateException("Cannot approve reservation with reason: conflict");
         }
 
-        var approvedReservation = new Reservation(
-                reservation.id(),
-                reservation.userId(),
-                reservation.roomId(),
-                reservation.startDate(),
-                reservation.endDate(),
-                ReservationStatus.APPROVED
-        );
+        reservationEntity.setStatus(ReservationStatus.APPROVED);
 
-        reservationMap.put(reservation.id(), approvedReservation);
+        repository.save(reservationEntity);
 
-        return approvedReservation;
+        return toDomainReservation(reservationEntity);
     }
 
-    private boolean isReservationConflict(Reservation reservation) {
-        for (Reservation existingReservation : reservationMap.values()) {
-            if (reservation.id().equals(existingReservation.id())) {
+    private boolean isReservationConflict(ReservationEntity reservation) {
+        var allReservations = repository.findAll();
+
+        for (ReservationEntity existingReservation : allReservations) {
+            if (reservation.getId().equals(existingReservation.getId())) {
                 continue;
             }
 
-            if (!reservation.roomId().equals(existingReservation.roomId())) {
+            if (!reservation.getRoomId().equals(existingReservation.getRoomId())) {
                 continue;
             }
 
-            if (!existingReservation.status().equals(ReservationStatus.APPROVED)) {
+            if (!existingReservation.getStatus().equals(ReservationStatus.APPROVED)) {
                 continue;
             }
 
-            if (reservation.startDate().isBefore(existingReservation.endDate())
-                    && existingReservation.startDate().isBefore(reservation.endDate())) {
+            if (reservation.getStartDate().isBefore(existingReservation.getEndDate())
+                    && existingReservation.getStartDate().isBefore(reservation.getEndDate())) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private Reservation toDomainReservation(ReservationEntity reservation) {
+        return new Reservation(
+                reservation.getId(),
+                reservation.getUserId(),
+                reservation.getRoomId(),
+                reservation.getStartDate(),
+                reservation.getEndDate(),
+                reservation.getStatus()
+        );
     }
 }
