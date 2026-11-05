@@ -1,3 +1,6 @@
 spring:
   application:
     name: reservation-system
+
+server:
+  port: 9090
