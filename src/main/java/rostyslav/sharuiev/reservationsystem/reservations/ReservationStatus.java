@@ -1,4 +1,4 @@
-package rostyslav.sharuiev.reservationsystem;
+package rostyslav.sharuiev.reservationsystem.reservations;
 
 public enum ReservationStatus {
     PENDING,

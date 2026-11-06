@@ -1,4 +1,4 @@
-package rostyslav.sharuiev.reservationsystem;
+package rostyslav.sharuiev.reservationsystem.reservations;
 
 import jakarta.persistence.*;
 
