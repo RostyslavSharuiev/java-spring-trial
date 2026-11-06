@@ -3,6 +3,7 @@ package rostyslav.sharuiev.reservationsystem.reservations;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,8 +21,18 @@ public class ReservationService {
         this.mapper = mapper;
     }
 
-    public List<Reservation> findAllReservations() {
-        List<ReservationEntity> allEntities = repository.findAll();
+    public List<Reservation> searchAllByFilter(ReservationSearchFilter filter) {
+        int pageSize = filter.pageSize() != null
+                ? filter.pageSize()
+                : 10;
+
+        int pageNumber = filter.pageNumber() != null
+                ? filter.pageNumber()
+                : 0;
+
+        var pageable = Pageable.ofSize(pageSize).withPage(pageNumber);
+
+        List<ReservationEntity> allEntities = repository.searchAllByFilter(filter.roomId(), filter.userId(), pageable);
 
         return allEntities
                 .stream()
