@@ -37,12 +37,12 @@ public class ReservationService {
     }
 
     public Reservation createReservation(Reservation reservation) {
-        if (reservation.id() != null) {
-            throw new IllegalArgumentException("Id should be empty");
-        }
-
         if (reservation.status() != null) {
             throw new IllegalArgumentException("Status should be empty");
+        }
+
+        if (!reservation.endDate().isAfter(reservation.startDate())) {
+            throw new IllegalArgumentException("Start day must be 1 day earlier than end date");
         }
 
         var entityToSave = new ReservationEntity(
@@ -72,6 +72,10 @@ public class ReservationService {
             );
         }
 
+        if (!reservationToUpdate.endDate().isAfter(reservationToUpdate.startDate())) {
+            throw new IllegalArgumentException("Start day must be 1 day earlier than end date");
+        }
+
         var reservationToSave = new ReservationEntity(
                 reservationEntity.getId(),
                 reservationToUpdate.userId(),
@@ -90,6 +94,20 @@ public class ReservationService {
     public void cancelReservation(Long id) {
         if (!repository.existsById(id)) {
             throw new EntityNotFoundException("Not found reservation with id: " + id);
+        }
+
+        var reservation = repository
+                .findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Not found reservation with id: " + id
+                ));
+
+        if (reservation.getStatus().equals(ReservationStatus.APPROVED)) {
+            throw new IllegalStateException("Can not cancel approved reservation. Contact with manager please");
+        }
+
+        if (reservation.getStatus().equals(ReservationStatus.CANCELLED)) {
+            throw new IllegalStateException("Can not cancel the reservation. Reservation was already cancelled");
         }
 
         repository.setStatus(id, ReservationStatus.CANCELLED);

@@ -1,5 +1,6 @@
 package rostyslav.sharuiev.reservationsystem;
 
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -36,7 +37,7 @@ public class ReservationController {
     }
 
     @PostMapping("/")
-    public ResponseEntity<Reservation> createReservation(@RequestBody Reservation reservation) {
+    public ResponseEntity<Reservation> createReservation(@RequestBody @Valid Reservation reservation) {
         log.info("Called createReservation");
 
         return ResponseEntity
@@ -47,7 +48,7 @@ public class ReservationController {
     @PutMapping("/{id}")
     public ResponseEntity<Reservation> updateReservation(
             @PathVariable Long id,
-            @RequestBody Reservation reservation
+            @RequestBody @Valid Reservation reservation
     ) {
         log.info("Called updateReservation with:\tid = {} \tdata = {}", id, reservation);
 
